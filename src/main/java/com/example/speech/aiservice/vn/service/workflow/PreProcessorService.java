@@ -4,23 +4,44 @@ import com.example.speech.aiservice.vn.dto.response.NovelInfoResponseDTO;
 import com.example.speech.aiservice.vn.model.entity.*;
 import com.example.speech.aiservice.vn.model.repository.ChapterRepository;
 import com.example.speech.aiservice.vn.model.repository.NovelRepository;
+import com.example.speech.aiservice.vn.service.filehandler.FileNameService;
 import com.example.speech.aiservice.vn.service.repositoryService.*;
 import com.example.speech.aiservice.vn.service.executor.MyRunnableService;
 import com.example.speech.aiservice.vn.service.google.GoogleChromeLauncherService;
 import com.example.speech.aiservice.vn.service.schedule.TimeDelay;
 import com.example.speech.aiservice.vn.service.selenium.WebDriverLauncherService;
 import com.example.speech.aiservice.vn.service.wait.WaitService;
+import com.twelvemonkeys.imageio.plugins.webp.WebPImageReaderSpi;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.select.Elements;
 import org.openqa.selenium.By;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
+import org.openqa.selenium.chrome.ChromeOptions;
+import org.openqa.selenium.remote.RemoteWebDriver;
+import org.openqa.selenium.support.ui.ExpectedConditions;
+import org.openqa.selenium.support.ui.WebDriverWait;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
 import org.springframework.scheduling.TaskScheduler;
 import org.springframework.stereotype.Service;
 
+import javax.imageio.ImageIO;
+import javax.imageio.spi.IIORegistry;
+import java.awt.image.BufferedImage;
 import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.nio.file.DirectoryStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.time.Duration;
 import java.util.*;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -40,14 +61,20 @@ public class PreProcessorService {
     private final ExecutorService executorService;
     private final ApplicationContext applicationContext;
     private final SeleniumConfigService seleniumConfigService;
+    private final FileNameService fileNameService;
     private volatile boolean stop = false; // Volatile variable to track STOP command - true = stopping
     private volatile String imagePath = null;
     private final TaskScheduler taskScheduler;
     private volatile ScheduledFuture<?> scheduledTask;
     private final TimeDelay timeDelay;
+    private String defaultPort = "9225";
+    private Queue<String> novelQueue = new LinkedList<>();
+    private String baseLibraryURL = "https://chivi.app/wn/books?_s=mtime";
+    private int currentPage = 1;
+
 
     @Autowired
-    public PreProcessorService(GoogleChromeLauncherService googleChromeLauncherService, WebDriverLauncherService webDriverLauncherService, WaitService waitService, NovelRepository novelRepository, ChapterRepository chapterRepository, NovelService novelService, ChapterService chapterService, TrackedNovelService trackedNovelService,  ApplicationContext applicationContext, SeleniumConfigService seleniumConfigService, TaskScheduler taskScheduler, TimeDelay timeDelay) {
+    public PreProcessorService(GoogleChromeLauncherService googleChromeLauncherService, WebDriverLauncherService webDriverLauncherService, WaitService waitService, NovelRepository novelRepository, ChapterRepository chapterRepository, NovelService novelService, ChapterService chapterService, TrackedNovelService trackedNovelService, ApplicationContext applicationContext, SeleniumConfigService seleniumConfigService, FileNameService fileNameService, TaskScheduler taskScheduler, TimeDelay timeDelay) {
         this.googleChromeLauncherService = googleChromeLauncherService;
         this.webDriverLauncherService = webDriverLauncherService;
         this.waitService = waitService;
@@ -56,6 +83,7 @@ public class PreProcessorService {
         this.trackedNovelService = trackedNovelService;
         this.applicationContext = applicationContext;
         this.seleniumConfigService = seleniumConfigService;
+        this.fileNameService = fileNameService;
         this.taskScheduler = taskScheduler;
         this.timeDelay = timeDelay;
         this.executorService = Executors.newFixedThreadPool(3);
@@ -79,91 +107,109 @@ public class PreProcessorService {
 
 
     public void executeWorkflow() {
-        NovelInfoResponseDTO novelInfo = scanNovelTitle();
-        String imagePath = getValidImagePath();
-        fetchFullPageContent(novelInfo);
 
-        List<SeleniumConfig> threadConfigs = seleniumConfigService.getAllConfigs();
-        List<Chapter> unscannedChapters;
-        int maxThreads = 3;
+        while (true) {
 
-        if (!stop) {
-            System.out.println("stop is false");
-            while (true) {
-                Novel novel = novelService.findByTitle(novelInfo.getTitle());
-                unscannedChapters = chapterService.getUnscannedChapters(novel.getId());
-
-                if (unscannedChapters.isEmpty()) {
-                    System.out.println("⚡ All chapters have been scanned, scheduling next check...");
-                    if (novel != null) {
-                        trackedNovelService.trackNovel(novel);
-                    }
-                    timeDelay.setSecond(10000);
-                    return;
-                }
-
-                int taskCount = Math.min(maxThreads, unscannedChapters.size());
-                CountDownLatch latch = new CountDownLatch(taskCount);
-
-                for (int i = 0; i < taskCount; i++) {
-                    if (stop) {
-                        System.out.println("STOP command received! No new tasks will be started.");
-                        timeDelay.setSecond(5000);
-                        return;
-                    }
-
-                    Chapter chapter = unscannedChapters.get(i);
-                    SeleniumConfig config = threadConfigs.get(i);
-
-                    FullWorkFlow fullWorkFlow = applicationContext.getBean(FullWorkFlow.class);
-                    MyRunnableService myRunnableService = new MyRunnableService(fullWorkFlow, config.getPort(), config.getSeleniumFileName(), chapter.getNovel(), chapter, imagePath);
-                    executorService.execute(() -> {
-                        try {
-                            myRunnableService.run();
-                        } finally {
-                            latch.countDown();
-                        }
-                    });
-                }
-
-                try {
-                    latch.await();
-                } catch (InterruptedException e) {
-                    System.err.println("Error completing task : " + e.getMessage());
-                }
-                System.out.println("Complete threads, continue scanning...");
+            String libaryURL;
+            if (currentPage == 1) {
+                libaryURL = baseLibraryURL;
+            } else {
+                libaryURL = baseLibraryURL + "&pg=" + currentPage;
             }
-        } else {
-            System.out.println("stop is true");
-            stopConditions();
-            timeDelay.setSecond(5000);
+
+            novelQueue = scanPage(libaryURL);
+
+            while (!novelQueue.isEmpty()) {
+
+                String href = novelQueue.poll();
+                System.out.println("Processing: " + href);
+
+                NovelInfoResponseDTO novelInfo = scanNovelTitle(href);
+                fetchFullPageContent(novelInfo);
+
+                /**
+                 * get image novel
+                 */
+                imagePath = getValidImagePath(null, novelInfo);
+
+                List<SeleniumConfig> threadConfigs = seleniumConfigService.getAllConfigs();
+                List<Chapter> unscannedChapters;
+
+                int maxThreads = 3;
+
+                if (!stop) {
+                    System.out.println("stop is false");
+                    while (true) {
+                        Novel novel = novelService.findByTitle(novelInfo.getTitle());
+                        unscannedChapters = chapterService.getUnscannedChapters(novel.getId());
+
+                        if (unscannedChapters.isEmpty()) {
+                            System.out.println("⚡ All chapters have been scanned, scheduling next check...");
+                            if (novel != null) {
+                                //trackedNovelService.trackNovel(novel);
+                                trackedNovelService.clearTracking();
+                            }
+                            timeDelay.setSecond(10000);
+                            break;
+                        }
+
+                        int taskCount = Math.min(maxThreads, unscannedChapters.size());
+                        CountDownLatch latch = new CountDownLatch(taskCount);
+
+                        for (int i = 0; i < taskCount; i++) {
+                            if (stop) {
+                                System.out.println("STOP command received! No new tasks will be started.");
+                                timeDelay.setSecond(5000);
+                                return;
+                            }
+
+                            Chapter chapter = unscannedChapters.get(i);
+                            SeleniumConfig config = threadConfigs.get(i);
+
+                            FullWorkFlow fullWorkFlow = applicationContext.getBean(FullWorkFlow.class);
+                            MyRunnableService myRunnableService = new MyRunnableService(fullWorkFlow, config.getPort(), config.getSeleniumFileName(), chapter.getNovel(), chapter, imagePath);
+                            executorService.execute(() -> {
+                                try {
+                                    myRunnableService.run();
+                                } finally {
+                                    latch.countDown();
+                                }
+                            });
+                        }
+
+                        try {
+                            latch.await();
+                        } catch (InterruptedException e) {
+                            System.err.println("Error completing task : " + e.getMessage());
+                        }
+                        System.out.println("Complete threads, continue scanning...");
+                    }
+                } else {
+                    System.out.println("stop is true");
+                    stopConditions();
+                    timeDelay.setSecond(5000);
+                }
+            }
+            /**
+             * When the current page queue is finished, increment it to scan the next page
+             */
+            currentPage++;
         }
     }
 
-    private NovelInfoResponseDTO scanNovelTitle() {
-        Scanner scanner = new Scanner(System.in);
-        String inputLink;
+    private NovelInfoResponseDTO scanNovelTitle(String inputLink) {
 
         Optional<TrackedNovel> trackedNovelOptional = trackedNovelService.getTrackedNovel();
 
         if (!trackedNovelOptional.isPresent()) {
-            while (true) {
-
-                System.out.println("Enter the novel link to scan: ");
-                inputLink = scanner.nextLine().trim();
-
-                if (!inputLink.isEmpty()) {
-                    try {
-                        Document doc = Jsoup.connect(inputLink).get();
-                        String title = doc.title();
-                        String safeTitle = title.split(" - ", 2)[0].trim();
-                        System.out.println("Title: " + safeTitle);
-
-                        return new NovelInfoResponseDTO(safeTitle, inputLink);
-                    } catch (Exception e) {
-                        //System.err.println("Error fetching novel title: " + e.getMessage());
-                        e.printStackTrace();
-                    }
+            if (!inputLink.isEmpty()) {
+                try {
+                    Document doc = Jsoup.connect(inputLink).get();
+                    String title = doc.title();
+                    String safeTitle = title.split(" - ", 2)[0].trim();
+                    return new NovelInfoResponseDTO(safeTitle, inputLink);
+                } catch (Exception e) {
+                    e.printStackTrace();
                 }
             }
         } else {
@@ -171,26 +217,70 @@ public class PreProcessorService {
             String novelLink = trackedNovelOptional.get().getNovel().getLink();
             return new NovelInfoResponseDTO(novelTitle, novelLink);
         }
+        return null;
     }
 
-    private String getValidImagePath() {
-        Scanner scanner = new Scanner(System.in);
-        String input;
-        if (imagePath == null) {
-            while (true) {
-                System.out.println("Enter image path: ");
-                input = scanner.nextLine().trim();
-                imagePath = input;
-                return imagePath;
+    private String getValidImagePath(WebDriver driver, NovelInfoResponseDTO novelInfoResponseDTO) {
+
+        String directoryPath = "E:\\CongViecHocTap\\Picture\\";
+        String baseFileName = novelInfoResponseDTO.getTitle();
+        String extension = ".png";
+
+        try {
+            Path dirPath = Paths.get(directoryPath);
+            if (Files.exists(dirPath) && Files.isDirectory(dirPath)) {
+                try (DirectoryStream<Path> stream = Files.newDirectoryStream(dirPath, "*" + extension)) {
+                    for (Path filePath : stream) {
+                        String fileName = filePath.getFileName().toString();
+                        if (fileName.contains(baseFileName)) {
+                            System.out.println("✅ Found existing image: " + filePath);
+                            return filePath.toString();
+                        }
+                    }
+                }
             }
+        } catch (IOException e) {
+            e.printStackTrace();
         }
-        return imagePath;
+
+
+        IIORegistry.getDefaultInstance().registerServiceProvider(new WebPImageReaderSpi());
+
+        WebElement imgElement = driver.findElement(By.cssSelector("img.svelte-34gr27"));
+        String imgUrl = imgElement.getAttribute("src");
+        System.out.println("Image URL: " + imgUrl);
+
+        String imageFilePath = fileNameService.getAvailableFileName(directoryPath, baseFileName, extension);
+
+        try {
+            URL url = new URL(imgUrl);
+            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+            connection.setRequestProperty("Referer", "https://chivi.app");
+            connection.setRequestProperty("User-Agent", "Mozilla/5.0");
+
+            InputStream inputStream = connection.getInputStream();
+            BufferedImage image = ImageIO.read(inputStream);
+
+            if (image == null) {
+                System.out.println("Failed to decode image. The image might be in WebP format.");
+                return null;
+            }
+
+            ImageIO.write(image, "png", new File(imageFilePath));
+
+            System.out.println("Image saved as: " + imageFilePath);
+
+            inputStream.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return imageFilePath;
     }
+
 
     private void fetchFullPageContent(NovelInfoResponseDTO novelInfo) {
 
         WebDriver driver = null;
-        String defaultPort = "9222";
 
         if (!novelService.isNovelExists(novelInfo.getTitle()) || trackedNovelService.isTrackNovellExists(novelInfo.getTitle())) {
 
@@ -200,11 +290,23 @@ public class PreProcessorService {
                     System.out.println("Could not find configuration with port " + defaultPort);
                     System.exit(1);
                 }
-
-                googleChromeLauncherService.openGoogleChrome(seleniumConfig.getPort(), seleniumConfig.getSeleniumFileName());
+                try {
+                    googleChromeLauncherService.openGoogleChrome(seleniumConfig.getPort(), seleniumConfig.getSeleniumFileName());
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
                 driver = webDriverLauncherService.initWebDriver(seleniumConfig.getPort());
 
+                waitService.waitForSeconds(1);
+
                 driver.get(novelInfo.getLink());
+
+                waitService.waitForSeconds(1);
+
+                /**
+                 * get image novel
+                 */
+                imagePath = getValidImagePath(driver, novelInfo);
 
                 waitService.waitForSeconds(1);
                 driver.findElement(By.xpath("//*[@id=\"svelte\"]/div[1]/main/article[1]/div[2]/div[1]/svelte-css-wrapper/div/div[1]/button")).click();
@@ -214,10 +316,6 @@ public class PreProcessorService {
                 waitService.waitForSeconds(3);
                 driver.navigate().refresh();
                 waitService.waitForSeconds(3);
-
-//            WebElement novelElement = driver.findElement(By.cssSelector("nav.bread a[href*='/wn/books']:nth-last-of-type(2) span"));
-//            String novelTitle = novelElement.getText();
-//            String novelLink = novelElement.findElement(By.xpath("./parent::a")).getAttribute("href");
 
                 Novel novel = new Novel(novelInfo.getTitle(), novelInfo.getLink());
                 if (!novelService.isNovelExists(novel.getTitle())) {
@@ -304,6 +402,49 @@ public class PreProcessorService {
             System.out.println(String.format("%s with link: %s already exists in the database system, stop crawling from the website! ", novelInfo.getTitle(), novelInfo.getLink()));
         }
     }
+
+    private Queue<String> scanPage(String libaryURL) {
+        WebDriver driver = null;
+        Queue<String> novelQueue = new LinkedList<>();
+
+        SeleniumConfig seleniumConfig = seleniumConfigService.getConfigByPort(defaultPort);
+        if (seleniumConfig == null) {
+            System.out.println("Could not find configuration with port " + defaultPort);
+            System.exit(1);
+        }
+
+        try {
+            googleChromeLauncherService.openGoogleChrome(seleniumConfig.getPort(), seleniumConfig.getSeleniumFileName());
+            driver = webDriverLauncherService.initWebDriver(seleniumConfig.getPort());
+
+            driver.get(libaryURL);
+            WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
+
+            wait.until(ExpectedConditions.visibilityOfElementLocated(By.cssSelector("div.blist.svelte-otec4r")));
+
+            List<WebElement> elements = driver.findElements(By.cssSelector("div.blist.svelte-otec4r a.bcard.svelte-1igqom0"));
+            if (elements.isEmpty()) {
+                System.out.println("No links found!");
+                return novelQueue;
+            }
+
+            int count = 1;
+            for (WebElement linkElement : elements) {
+                String href = linkElement.getAttribute("href");
+                novelQueue.add(href);
+                System.out.println(count + ". Link: " + href);
+                count++;
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            googleChromeLauncherService.shutdown();
+            webDriverLauncherService.shutDown(driver);
+        }
+
+        return novelQueue;
+    }
+
 
     public void stopConditions() {
         trackedNovelService.clearTracking();

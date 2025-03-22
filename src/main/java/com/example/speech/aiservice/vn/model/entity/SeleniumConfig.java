@@ -3,7 +3,7 @@ package com.example.speech.aiservice.vn.model.entity;
 import jakarta.persistence.*;
 
 @Entity
-@Table(name = "selenium_config")
+@Table(name = "selenium_config_archive")
 public class SeleniumConfig {
 
     @Id

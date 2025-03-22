@@ -17,7 +17,6 @@ public class GoogleChromeLauncherService {
         process = Runtime.getRuntime().exec(command);
     }
 
-
     public void shutdown() {
         process.destroy();
     }

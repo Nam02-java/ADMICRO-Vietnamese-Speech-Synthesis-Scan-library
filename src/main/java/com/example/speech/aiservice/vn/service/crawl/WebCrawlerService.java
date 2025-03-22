@@ -56,16 +56,16 @@ public class WebCrawlerService {
 //
 //        fileWriterService.writeToFile(contentFilePath, content);
 
-        // Tạo thư mục cho bộ truyện nếu chưa tồn tại
+        // Create a folder for the collection if it does not exist.
         String safeNovelTitle = fileNameService.sanitizeFileName(novel.getTitle());
         String novelDirectory = directoryPath + File.separator + safeNovelTitle;
         fileNameService.ensureDirectoryExists(novelDirectory);
 
-        // Xử lý tên file chương hợp lệ
+        // Handling valid chapter file names
         String safeChapterTitle = fileNameService.sanitizeFileName(chapter.getTitle()) + fileExtension;
         String contentFilePath = novelDirectory + File.separator + safeChapterTitle;
 
-        // Ghi nội dung chương vào file
+        // Write content to file
         fileWriterService.writeToFile(contentFilePath, content);
 
         return new WebCrawlResponseDTO("Crawling completed", chapter.getLink(), contentFilePath);
