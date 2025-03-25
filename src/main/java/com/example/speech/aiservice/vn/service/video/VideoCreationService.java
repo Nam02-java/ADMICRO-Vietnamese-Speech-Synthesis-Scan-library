@@ -4,6 +4,7 @@ import com.example.speech.aiservice.vn.dto.response.CreateVideoResponseDTO;
 import com.example.speech.aiservice.vn.model.entity.Chapter;
 import com.example.speech.aiservice.vn.model.entity.Novel;
 import com.example.speech.aiservice.vn.service.filehandler.FileNameService;
+import com.example.speech.aiservice.vn.service.propertie.PropertiesService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -11,22 +12,24 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.util.UUID;
 
 @Service
 public class VideoCreationService {
 
     private final FileNameService fileNameService;
-    private final String ffmpegPath = "E:\\CongViecHocTap\\ffmpeg\\ffmpeg-master-latest-win64-gpl-shared\\bin\\ffmpeg.exe";
-    private final String uploadDirectoryPath = "E:\\CongViecHocTap\\UploadVideo\\";
-    private final String fileExtension = ".mp4";
+    private final PropertiesService propertiesService;
 
     @Autowired
-    public VideoCreationService(FileNameService fileNameService) {
+    public VideoCreationService(FileNameService fileNameService, PropertiesService propertiesService) {
         this.fileNameService = fileNameService;
+        this.propertiesService = propertiesService;
     }
 
     public CreateVideoResponseDTO createVideoResponseDTO(String audioPath, String imagePath, Novel novel, Chapter chapter) {
+
+        String ffmpegPath = propertiesService.getFfmpegPath();
+        String uploadDirectoryPath = propertiesService.getUploadDirectory();
+        String fileExtension = propertiesService.getUploadFileExtension();
 
         if (audioPath == null) {
             System.out.println("⚠️ No video files found!");

@@ -1,6 +1,6 @@
 package com.example.speech.aiservice.vn.service.repositoryService;
 
-import com.example.speech.aiservice.vn.model.TrackUpload;
+import com.example.speech.aiservice.vn.model.entity.TrackUpload;
 import com.example.speech.aiservice.vn.model.entity.Chapter;
 import com.example.speech.aiservice.vn.model.entity.Novel;
 import com.example.speech.aiservice.vn.model.repository.TrackUploadRepository;

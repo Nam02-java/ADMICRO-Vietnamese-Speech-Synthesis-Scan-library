@@ -1,4 +1,4 @@
-package com.example.speech.aiservice.vn.model;
+package com.example.speech.aiservice.vn.model.entity;
 
 import com.example.speech.aiservice.vn.model.entity.Chapter;
 import com.example.speech.aiservice.vn.model.entity.Novel;

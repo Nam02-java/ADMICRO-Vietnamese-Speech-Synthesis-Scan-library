@@ -6,6 +6,7 @@ import com.example.speech.aiservice.vn.model.entity.Novel;
 import com.example.speech.aiservice.vn.service.filehandler.FileNameService;
 import com.example.speech.aiservice.vn.service.filehandler.FileReaderService;
 import com.example.speech.aiservice.vn.service.google.GoogleAudioDownloaderService;
+import com.example.speech.aiservice.vn.service.propertie.PropertiesService;
 import com.example.speech.aiservice.vn.service.wait.WaitService;
 import org.openqa.selenium.By;
 import org.openqa.selenium.WebDriver;
@@ -22,18 +23,22 @@ public class SpeechService {
     private final FileReaderService fileReaderService;
     private final WaitService waitService;
     private final GoogleAudioDownloaderService googleAudioDownloaderService;
-    private final String directoryPath = "E:\\CongViecHocTap\\Voice\\";
-    private final String fileExtension = ".mp4";
+    private final PropertiesService propertiesService;
+
 
     @Autowired
-    public SpeechService(FileNameService fileNameService, FileReaderService fileReaderService, WaitService waitService, GoogleAudioDownloaderService googleAudioDownloaderService) {
+    public SpeechService(FileNameService fileNameService, FileReaderService fileReaderService, WaitService waitService, GoogleAudioDownloaderService googleAudioDownloaderService, PropertiesService propertiesService) {
         this.fileNameService = fileNameService;
         this.fileReaderService = fileReaderService;
         this.waitService = waitService;
         this.googleAudioDownloaderService = googleAudioDownloaderService;
+        this.propertiesService = propertiesService;
     }
 
     public TextToSpeechResponseDTO textToSpeechResponseDTO(WebDriver driver, String textToSpeechUrl, String contentfilePath, Novel novel, Chapter chapter) throws IOException {
+
+        String voiceDirectoryPath = propertiesService.getVoiceDirectory();
+        String fileExtension = propertiesService.getVoiceFileExtension();
 
         driver.get(textToSpeechUrl);
 
@@ -71,7 +76,7 @@ public class SpeechService {
 
         // Tạo thư mục cho bộ truyện nếu chưa tồn tại
         String safeNovelTitle = fileNameService.sanitizeFileName(novel.getTitle());
-        String novelDirectory = directoryPath + File.separator + safeNovelTitle;
+        String novelDirectory = voiceDirectoryPath + File.separator + safeNovelTitle;
         fileNameService.ensureDirectoryExists(novelDirectory);
 
         // Xử lý tên file chương hợp lệ

@@ -5,6 +5,7 @@ import com.example.speech.aiservice.vn.model.entity.Chapter;
 import com.example.speech.aiservice.vn.model.entity.Novel;
 import com.example.speech.aiservice.vn.service.filehandler.FileNameService;
 import com.example.speech.aiservice.vn.service.filehandler.FileWriterService;
+import com.example.speech.aiservice.vn.service.propertie.PropertiesService;
 import com.example.speech.aiservice.vn.service.wait.WaitService;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
@@ -19,18 +20,20 @@ public class WebCrawlerService {
     private final FileNameService fileNameService;
     private final FileWriterService fileWriterService;
     private final WaitService waitService;
-    private String directoryPath = "E:\\CongViecHocTap\\Content\\";
-    private final String fileExtension = ".txt";
-
+    private final PropertiesService propertiesService;
 
     @Autowired
-    public WebCrawlerService(FileNameService fileNameService, FileWriterService fileWriterService, WaitService waitService) {
+    public WebCrawlerService(FileNameService fileNameService, FileWriterService fileWriterService, WaitService waitService, PropertiesService propertiesService) {
         this.fileNameService = fileNameService;
         this.fileWriterService = fileWriterService;
         this.waitService = waitService;
+        this.propertiesService = propertiesService;
     }
 
     public WebCrawlResponseDTO webCrawlResponseDTO(WebDriver driver, Novel novel, Chapter chapter) throws InterruptedException {
+
+        String contentDirectoryPath = propertiesService.getContentDirectory();
+        String contentFileExtension = propertiesService.getContentFileExtension();
 
         driver.get(chapter.getLink());
 
@@ -58,11 +61,11 @@ public class WebCrawlerService {
 
         // Create a folder for the collection if it does not exist.
         String safeNovelTitle = fileNameService.sanitizeFileName(novel.getTitle());
-        String novelDirectory = directoryPath + File.separator + safeNovelTitle;
+        String novelDirectory = contentDirectoryPath + File.separator + safeNovelTitle;
         fileNameService.ensureDirectoryExists(novelDirectory);
 
         // Handling valid chapter file names
-        String safeChapterTitle = fileNameService.sanitizeFileName(chapter.getTitle()) + fileExtension;
+        String safeChapterTitle = fileNameService.sanitizeFileName(chapter.getTitle()) + contentFileExtension;
         String contentFilePath = novelDirectory + File.separator + safeChapterTitle;
 
         // Write content to file

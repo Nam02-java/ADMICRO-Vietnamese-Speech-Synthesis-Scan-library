@@ -5,6 +5,7 @@ import com.example.speech.aiservice.vn.model.entity.*;
 import com.example.speech.aiservice.vn.model.repository.ChapterRepository;
 import com.example.speech.aiservice.vn.model.repository.NovelRepository;
 import com.example.speech.aiservice.vn.service.filehandler.FileNameService;
+import com.example.speech.aiservice.vn.service.propertie.PropertiesService;
 import com.example.speech.aiservice.vn.service.repositoryService.*;
 import com.example.speech.aiservice.vn.service.executor.MyRunnableService;
 import com.example.speech.aiservice.vn.service.google.GoogleChromeLauncherService;
@@ -51,7 +52,6 @@ import java.util.concurrent.ScheduledFuture;
 
 @Service
 public class PreProcessorService {
-
     private final GoogleChromeLauncherService googleChromeLauncherService;
     private final WebDriverLauncherService webDriverLauncherService;
     private final WaitService waitService;
@@ -67,14 +67,12 @@ public class PreProcessorService {
     private final TaskScheduler taskScheduler;
     private volatile ScheduledFuture<?> scheduledTask;
     private final TimeDelay timeDelay;
-    private String defaultPort = "9225";
     private Queue<String> novelQueue = new LinkedList<>();
-    private String baseLibraryURL = "https://chivi.app/wn/books?_s=mtime";
     private int currentPage = 1;
-
+    private final PropertiesService propertiesService;
 
     @Autowired
-    public PreProcessorService(GoogleChromeLauncherService googleChromeLauncherService, WebDriverLauncherService webDriverLauncherService, WaitService waitService, NovelRepository novelRepository, ChapterRepository chapterRepository, NovelService novelService, ChapterService chapterService, TrackedNovelService trackedNovelService, ApplicationContext applicationContext, SeleniumConfigService seleniumConfigService, FileNameService fileNameService, TaskScheduler taskScheduler, TimeDelay timeDelay) {
+    public PreProcessorService(GoogleChromeLauncherService googleChromeLauncherService, WebDriverLauncherService webDriverLauncherService, WaitService waitService, NovelRepository novelRepository, ChapterRepository chapterRepository, NovelService novelService, ChapterService chapterService, TrackedNovelService trackedNovelService, ApplicationContext applicationContext, SeleniumConfigService seleniumConfigService, FileNameService fileNameService, TaskScheduler taskScheduler, TimeDelay timeDelay, PropertiesService propertiesService) {
         this.googleChromeLauncherService = googleChromeLauncherService;
         this.webDriverLauncherService = webDriverLauncherService;
         this.waitService = waitService;
@@ -86,6 +84,7 @@ public class PreProcessorService {
         this.fileNameService = fileNameService;
         this.taskScheduler = taskScheduler;
         this.timeDelay = timeDelay;
+        this.propertiesService = propertiesService;
         this.executorService = Executors.newFixedThreadPool(3);
     }
 
@@ -108,9 +107,12 @@ public class PreProcessorService {
 
     public void executeWorkflow() {
 
+        String baseLibraryURL = propertiesService.getBaseLibraryURL();
+
         while (true) {
 
             String libaryURL;
+
             if (currentPage == 1) {
                 libaryURL = baseLibraryURL;
             } else {
@@ -149,7 +151,7 @@ public class PreProcessorService {
                                 //trackedNovelService.trackNovel(novel);
                                 trackedNovelService.clearTracking();
                             }
-                            timeDelay.setSecond(10000);
+                            // timeDelay.setSecond(10000);
                             break;
                         }
 
@@ -222,9 +224,9 @@ public class PreProcessorService {
 
     private String getValidImagePath(WebDriver driver, NovelInfoResponseDTO novelInfoResponseDTO) {
 
-        String directoryPath = "E:\\CongViecHocTap\\Picture\\";
+        String directoryPath = propertiesService.getImageDirectory();
         String baseFileName = novelInfoResponseDTO.getTitle();
-        String extension = ".png";
+        String extension = propertiesService.getImageExtension();
 
         try {
             Path dirPath = Paths.get(directoryPath);
@@ -285,9 +287,9 @@ public class PreProcessorService {
         if (!novelService.isNovelExists(novelInfo.getTitle()) || trackedNovelService.isTrackNovellExists(novelInfo.getTitle())) {
 
             try {
-                SeleniumConfig seleniumConfig = seleniumConfigService.getConfigByPort(defaultPort);
+                SeleniumConfig seleniumConfig = seleniumConfigService.getConfigByPort(propertiesService.getDefaultPort());
                 if (seleniumConfig == null) {
-                    System.out.println("Could not find configuration with port " + defaultPort);
+                    System.out.println("Could not find configuration with port " + propertiesService.getDefaultPort());
                     System.exit(1);
                 }
                 try {
@@ -407,9 +409,9 @@ public class PreProcessorService {
         WebDriver driver = null;
         Queue<String> novelQueue = new LinkedList<>();
 
-        SeleniumConfig seleniumConfig = seleniumConfigService.getConfigByPort(defaultPort);
+        SeleniumConfig seleniumConfig = seleniumConfigService.getConfigByPort(propertiesService.getDefaultPort());
         if (seleniumConfig == null) {
-            System.out.println("Could not find configuration with port " + defaultPort);
+            System.out.println("Could not find configuration with port " + propertiesService.getDefaultPort());
             System.exit(1);
         }
 

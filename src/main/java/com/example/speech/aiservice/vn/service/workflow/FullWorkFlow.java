@@ -1,11 +1,11 @@
 package com.example.speech.aiservice.vn.service.workflow;
 
 import com.example.speech.aiservice.vn.dto.response.*;
-import com.example.speech.aiservice.vn.model.TrackUpload;
 import com.example.speech.aiservice.vn.model.entity.Chapter;
 import com.example.speech.aiservice.vn.model.entity.Novel;
 import com.example.speech.aiservice.vn.service.account.LoginCheckerService;
 import com.example.speech.aiservice.vn.service.account.LoginService;
+import com.example.speech.aiservice.vn.service.propertie.PropertiesService;
 import com.example.speech.aiservice.vn.service.repositoryService.ChapterService;
 import com.example.speech.aiservice.vn.service.crawl.WebCrawlerService;
 import com.example.speech.aiservice.vn.service.google.GoogleChromeLauncherService;
@@ -32,10 +32,11 @@ public class FullWorkFlow {
     private final YoutubeUploadService youtubeUploadService;
     private final ChapterService chapterService;
     private final TrackUploadService trackUploadService;
+    private final PropertiesService propertiesService;
 
     // Constructor Injection
     @Autowired
-    public FullWorkFlow(GoogleChromeLauncherService googleChromeLauncherService, WebDriverLauncherService webDriverLauncherService, LoginCheckerService loginCheckerService, LoginService loginService, WebCrawlerService webCrawlerService, SpeechService speechService, VideoCreationService videoCreationService, YoutubeUploadService youtubeUploadService, ChapterService chapterService, TrackUploadService trackUploadService) {
+    public FullWorkFlow(GoogleChromeLauncherService googleChromeLauncherService, WebDriverLauncherService webDriverLauncherService, LoginCheckerService loginCheckerService, LoginService loginService, WebCrawlerService webCrawlerService, SpeechService speechService, VideoCreationService videoCreationService, YoutubeUploadService youtubeUploadService, ChapterService chapterService, TrackUploadService trackUploadService, PropertiesService propertiesService) {
         this.googleChromeLauncherService = googleChromeLauncherService;
         this.webDriverLauncherService = webDriverLauncherService;
         this.loginCheckerService = loginCheckerService;
@@ -46,6 +47,7 @@ public class FullWorkFlow {
         this.youtubeUploadService = youtubeUploadService;
         this.chapterService = chapterService;
         this.trackUploadService = trackUploadService;
+        this.propertiesService = propertiesService;
     }
 
     public void runProcess(String port, String seleniumFileName, Novel novel, Chapter chapter, String imagePath) {
@@ -54,8 +56,8 @@ public class FullWorkFlow {
 
     private FullProcessResponseDTO fullProcessResponseDTO(String port, String seleniumFileName, Novel novel, Chapter chapter, String imagePath) {
         WebDriver chromeDriver = null;
-        String novelUrl = "https://chivi.app/";
-        String textToSpeechUrl = "https://speech.aiservice.vn/tts/tools/demo";
+        String homepageUrl = propertiesService.getHomePageUrl();
+        String textToSpeechUrl = propertiesService.getTextToSpeechUrl();
 
         trackUploadService.saveTrack(novel.getId(), chapter.getId());
 
@@ -69,7 +71,7 @@ public class FullWorkFlow {
             googleChromeLauncherService.openGoogleChrome(port, seleniumFileName);
             chromeDriver = webDriverLauncherService.initWebDriver(port);
 
-            chromeDriver.get(novelUrl);
+            chromeDriver.get(homepageUrl);
 
             // Check to see if you are logged in or not
             boolean loggedIn = loginCheckerService.isLoggedIn(chromeDriver);

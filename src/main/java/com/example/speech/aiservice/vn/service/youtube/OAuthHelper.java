@@ -1,5 +1,6 @@
 package com.example.speech.aiservice.vn.service.youtube;
 
+import com.example.speech.aiservice.vn.service.propertie.PropertiesService;
 import com.google.api.client.auth.oauth2.Credential;
 import com.google.api.client.extensions.java6.auth.oauth2.AuthorizationCodeInstalledApp;
 import com.google.api.client.extensions.jetty.auth.oauth2.LocalServerReceiver;
@@ -12,6 +13,7 @@ import com.google.api.client.json.jackson2.JacksonFactory;
 import com.google.api.client.util.store.FileDataStoreFactory;
 import com.google.api.services.youtube.YouTube;
 import com.google.api.services.youtube.YouTubeScopes;
+import jakarta.annotation.PostConstruct;
 import org.springframework.stereotype.Service;
 
 import java.io.File;
@@ -22,15 +24,26 @@ import java.util.Collections;
 
 @Service
 public class OAuthHelper {
-    private static final String CLIENT_SECRET_FILE = "E:\\CongViecHocTap\\OAuth JSON\\client_secret_234892455390-lqobndkg1726det73adkrouvhvc11q81.apps.googleusercontent.com.json";
-    private static final String TOKENS_DIRECTORY_PATH = "E:\\CongViecHocTap\\Token"; // Lưu token
+    private static String CLIENT_SECRET_FILE;
+    private static String TOKENS_DIRECTORY_PATH;
+    private final PropertiesService propertiesService;
     private static final JsonFactory JSON_FACTORY = JacksonFactory.getDefaultInstance();
+
+    public OAuthHelper(PropertiesService propertiesService) {
+        this.propertiesService = propertiesService;
+    }
+
+    @PostConstruct
+    public void init() {
+        CLIENT_SECRET_FILE = propertiesService.getOAuthClientSecretFile();
+        TOKENS_DIRECTORY_PATH = propertiesService.getOAuthTokensDirectory();
+    }
 
     private Credential authorize() throws IOException, GeneralSecurityException {
         HttpTransport httpTransport = GoogleNetHttpTransport.newTrustedTransport();
         GoogleClientSecrets clientSecrets = GoogleClientSecrets.load(JSON_FACTORY, new FileReader(CLIENT_SECRET_FILE));
 
-        // Tạo flow xác thực OAuth2
+        // Create OAuth2 authentication flow
         GoogleAuthorizationCodeFlow flow = new GoogleAuthorizationCodeFlow.Builder(
                 httpTransport, JSON_FACTORY, clientSecrets,
                 Collections.singletonList(YouTubeScopes.YOUTUBE_UPLOAD))
@@ -38,15 +51,15 @@ public class OAuthHelper {
                 .setAccessType("offline")
                 .build();
 
-        // Kiểm tra xem đã có token chưa
+        // Check if token is available
         Credential credential = flow.loadCredential("user");
         if (credential != null && credential.getRefreshToken() != null) {
-            // Nếu đã có refresh_token, chỉ cần làm mới access_token
+            // If you already have a refresh_token, just refresh the access_token
             credential.refreshToken();
             return credential;
         }
 
-        // Nếu chưa có, mở trình duyệt để lấy token mới
+        // If not, open the browser to get a new token
         return new AuthorizationCodeInstalledApp(flow, new LocalServerReceiver.Builder()
                 .setPort(8888)
                 .setCallbackPath("/")
