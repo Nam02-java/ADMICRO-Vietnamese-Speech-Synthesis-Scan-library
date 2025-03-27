@@ -4,21 +4,27 @@ import org.springframework.stereotype.Service;
 
 import java.io.File;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 
 @Service
 public class FileNameService {
     public synchronized String getAvailableFileName(String directoryPath, String baseFileName, String extension) {
-        baseFileName = sanitizeFileName(baseFileName); // Replace invalid characters with "_"
+        if (directoryPath == null || baseFileName == null || extension == null) {
+            throw new IllegalArgumentException("directoryPath, baseFileName, and extension cannot be null");
+        }
+
+        baseFileName = sanitizeFileName(baseFileName); // Thay thế ký tự không hợp lệ bằng "_"
 
         int fileNumber = 1;
-        String fileName = baseFileName + "(" + fileNumber + ")" + extension;
+        Path filePath = Paths.get(directoryPath, baseFileName + "(" + fileNumber + ")" + extension);
 
-        while (Files.exists(Paths.get(directoryPath + fileName))) {
+        while (Files.exists(filePath)) {
             fileNumber++;
-            fileName = baseFileName + "(" + fileNumber + ")" + extension;
+            filePath = Paths.get(directoryPath, baseFileName + "(" + fileNumber + ")" + extension);
         }
-        return directoryPath + fileName;
+
+        return filePath.toString();
     }
 
     public synchronized void ensureDirectoryExists(String path) {

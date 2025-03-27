@@ -66,13 +66,13 @@ public class WebCrawlerService {
 
         // Handling valid chapter file names
         String safeChapterTitle = fileNameService.sanitizeFileName(chapter.getTitle()) + contentFileExtension;
-        String contentFilePath = novelDirectory + File.separator + safeChapterTitle;
+        //String contentFilePath = novelDirectory + File.separator + safeChapterTitle;
+        String contentFilePath = fileNameService.getAvailableFileName(novelDirectory, safeChapterTitle, contentFileExtension);
 
         // Write content to file
         fileWriterService.writeToFile(contentFilePath, content);
 
         return new WebCrawlResponseDTO("Crawling completed", chapter.getLink(), contentFilePath);
-
     }
 }
 

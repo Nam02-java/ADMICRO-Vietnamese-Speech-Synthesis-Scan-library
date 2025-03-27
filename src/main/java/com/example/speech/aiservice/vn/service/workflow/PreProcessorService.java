@@ -315,7 +315,7 @@ public class PreProcessorService {
                 waitService.waitForSeconds(1);
                 driver.findElement(By.xpath("//*[@id=\"svelte\"]/div[1]/main/article[1]/div[2]/div[1]/svelte-css-wrapper/div/div[2]/div/a[1]/span[1]")).click();
 
-                waitService.waitForSeconds(3);
+                waitService.waitForSeconds(10); // default is 3 seconds but set 10 for connection assurance
                 driver.navigate().refresh();
                 waitService.waitForSeconds(3);
 

@@ -38,7 +38,7 @@ public class SpeechService {
     public TextToSpeechResponseDTO textToSpeechResponseDTO(WebDriver driver, String textToSpeechUrl, String contentfilePath, Novel novel, Chapter chapter) throws IOException {
 
         String voiceDirectoryPath = propertiesService.getVoiceDirectory();
-        String fileExtension = propertiesService.getVoiceFileExtension();
+        String voiceFileExtension = propertiesService.getVoiceFileExtension();
 
         driver.get(textToSpeechUrl);
 
@@ -80,12 +80,9 @@ public class SpeechService {
         fileNameService.ensureDirectoryExists(novelDirectory);
 
         // Xử lý tên file chương hợp lệ
-        String safeChapterTitle = fileNameService.sanitizeFileName(chapter.getTitle()) + fileExtension;
-        String audioFilePath = novelDirectory + File.separator + safeChapterTitle;
-
-
-        //String audioFilePath = fileNameService.getAvailableFileName(directoryPath, chapter.getTitle(), fileExtension);
-
+        String safeChapterTitle = fileNameService.sanitizeFileName(chapter.getTitle()) ;
+        //String audioFilePath = novelDirectory + File.separator + safeChapterTitle;
+        String audioFilePath = fileNameService.getAvailableFileName(novelDirectory, safeChapterTitle, voiceFileExtension);
 
         googleAudioDownloaderService.download(audioUrl, audioFilePath);
 
