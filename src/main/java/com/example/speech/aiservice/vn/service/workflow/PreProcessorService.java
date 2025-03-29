@@ -245,6 +245,10 @@ public class PreProcessorService {
             e.printStackTrace();
         }
 
+        if (driver == null) {
+            System.out.println("❌ WebDriver is null, skipping image extraction...");
+            return null;
+        }
 
         IIORegistry.getDefaultInstance().registerServiceProvider(new WebPImageReaderSpi());
 
