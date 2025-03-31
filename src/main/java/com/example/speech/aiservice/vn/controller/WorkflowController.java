@@ -1,4 +1,4 @@
-package com.example.speech.aiservice.vn.controller.http.restful;
+package com.example.speech.aiservice.vn.controller;
 
 import com.example.speech.aiservice.vn.service.workflow.PreProcessorService;
 import org.springframework.beans.factory.annotation.Autowired;
