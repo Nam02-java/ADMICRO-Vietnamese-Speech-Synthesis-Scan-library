@@ -5,6 +5,8 @@ import com.example.speech.aiservice.vn.model.entity.Chapter;
 import com.example.speech.aiservice.vn.model.entity.Novel;
 import com.example.speech.aiservice.vn.service.repositoryService.TrackUploadService;
 import com.example.speech.aiservice.vn.service.wait.WaitService;
+import com.google.api.client.googleapis.json.GoogleJsonError;
+import com.google.api.client.googleapis.json.GoogleJsonResponseException;
 import com.google.api.client.http.FileContent;
 import com.google.api.services.youtube.YouTube;
 import com.google.api.services.youtube.model.Video;
@@ -14,7 +16,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.io.File;
-import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 
@@ -34,7 +35,6 @@ public class YouTubeUploader {
 
     // Upload video to YouTube
     public String uploadVideo(String videoFilePath, Novel novel, Chapter chapter, String title, String description, String tags, String privacyStatus) throws Exception {
-        String notification = null;
         YouTube youtubeService = oAuthHelper.getService();
 
         // Configure video metadata
@@ -75,20 +75,43 @@ public class YouTubeUploader {
                     trackUploadService.deleteById(firstTrack.getId());
                 }
                 // Send upload request
-                YouTube.Videos.Insert request = youtubeService.videos().insert("snippet,status", video, mediaContent);
-                try {
-                    Video response = request.execute();
-                    String videoId = response.getId();
-                    String uploadedVideoURL = "https://www.youtube.com/watch?v=" + videoId;
-                    System.out.printf("%s - uploaded at: %s%n", title, uploadedVideoURL);
-                    notification = uploadedVideoURL;
-                } catch (IOException e) {
-                    throw new RuntimeException("YouTube API Upload Error: " + e.getMessage(), e);
+                while (true) {
+                    try {
+                        YouTube.Videos.Insert request = youtubeService.videos().insert("snippet,status", video, mediaContent);
+                        Video response = request.execute();
+                        String videoId = response.getId();
+                        String uploadedVideoURL = "https://www.youtube.com/watch?v=" + videoId;
+                        System.out.printf("%s - uploaded at: %s%n", title, uploadedVideoURL);
+                        return uploadedVideoURL;
+                    } catch (GoogleJsonResponseException e) {
+                        if (e.getDetails() != null && e.getDetails().getErrors() != null) {
+                            boolean retry = false;
+                            for (GoogleJsonError.ErrorInfo error : e.getDetails().getErrors()) {
+                                if ("uploadLimitExceeded".equals(error.getReason())) {
+                                    e.printStackTrace();
+                                    System.out.println("Upload limit exceeded. Retrying in 10 minutes...");
+                                    waitService.waitForSeconds(10); // default wait 10 minutes
+                                    retry = true;
+                                    break;
+                                }
+                            }
+
+                            /**
+                             * Continue looping if upload error Limit Exceeded
+                             * Continue until video upload is successful
+                             */
+                            if (retry) {
+                                continue;
+                            }
+                        }
+                        throw e; // If other error, exit immediately
+                    }
                 }
+
             } else {
                 waitService.waitForSeconds(5);
             }
         }
-        return notification;
+        return null;
     }
 }

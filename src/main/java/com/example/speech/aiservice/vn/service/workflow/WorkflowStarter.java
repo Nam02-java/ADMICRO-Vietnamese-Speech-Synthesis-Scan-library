@@ -34,9 +34,4 @@ public class WorkflowStarter {
             }
         }).start();
     }
-
-    //  @EventListener(ApplicationReadyEvent.class) // Chỉ chạy khi app khởi động
-//    public void startMonitoring() {
-//        preProcessorService.startWorkflow(0);
-//    }
 }
